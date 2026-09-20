@@ -1,0 +1,4 @@
+Flask>=3.0,<4.0
+Pillow>=10.0,<12.0
+torch>=2.2,<3.0
+torchvision>=0.17,<1.0
