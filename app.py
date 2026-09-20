@@ -49,9 +49,21 @@ model = None
 model_error = None
 
 
+def display_class_name(class_name):
+    """Convert the PlantVillage label into a readable result name."""
+    label = class_name.removeprefix("Tomato___")
+    if label == "healthy":
+        return "Healthy Tomato Leaf"
+    if label == "Spider_mites Two-spotted_spider_mite":
+        return "Tomato Spider Mites"
+    if label.startswith("Tomato_"):
+        label = label.removeprefix("Tomato_")
+    return f"Tomato {label.replace('_', ' ').title()}"
+
+
 def load_model():
     """Load a ResNet18 checkpoint when it is available."""
-    global model, model_error
+    global CLASS_NAMES, model, model_error
 
     if torch is None or models is None:
         model_error = "PyTorch is not installed. Run pip install -r requirements.txt to enable predictions."
@@ -62,10 +74,24 @@ def load_model():
         return
 
     try:
-        network = models.resnet18(weights=None)
-        network.fc = torch.nn.Linear(network.fc.in_features, len(CLASS_NAMES))
         checkpoint = torch.load(MODEL_PATH, map_location="cpu")
-        state_dict = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+            class_to_idx = checkpoint.get("class_to_idx", {})
+            if class_to_idx:
+                class_count = max(
+                    len(CLASS_NAMES),
+                    max(class_to_idx.values()) + 1,
+                    state_dict["fc.weight"].shape[0],
+                )
+                CLASS_NAMES = [f"Unknown Tomato Class {index}" for index in range(class_count)]
+                for class_name, index in class_to_idx.items():
+                    CLASS_NAMES[index] = display_class_name(class_name)
+        else:
+            state_dict = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+        class_count = state_dict["fc.weight"].shape[0]
+        network = models.resnet18(weights=None)
+        network.fc = torch.nn.Linear(network.fc.in_features, class_count)
         state_dict = {key.removeprefix("module."): value for key, value in state_dict.items()}
         network.load_state_dict(state_dict)
         network.eval()
