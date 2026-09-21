@@ -79,17 +79,29 @@ def load_model():
             state_dict = checkpoint["model_state_dict"]
             class_to_idx = checkpoint.get("class_to_idx", {})
             if class_to_idx:
-                class_count = max(
-                    len(CLASS_NAMES),
-                    max(class_to_idx.values()) + 1,
-                    state_dict["fc.weight"].shape[0],
-                )
-                CLASS_NAMES = [f"Unknown Tomato Class {index}" for index in range(class_count)]
+                class_count = state_dict["fc.weight"].shape[0]
+                mapped_indices = set(class_to_idx.values())
+                if mapped_indices != set(range(class_count)):
+                    model_error = (
+                        f"Checkpoint has {class_count} output classes but only "
+                        f"{len(class_to_idx)} labeled classes. Replace it with a "
+                        "checkpoint whose class_to_idx covers every output."
+                    )
+                    return
+                CLASS_NAMES = ["Unknown Class" for _ in range(class_count)]
                 for class_name, index in class_to_idx.items():
                     CLASS_NAMES[index] = display_class_name(class_name)
         else:
             state_dict = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
         class_count = state_dict["fc.weight"].shape[0]
+        if not isinstance(checkpoint, dict) or not checkpoint.get("class_to_idx"):
+            if class_count != len(CLASS_NAMES):
+                model_error = (
+                    f"Checkpoint has {class_count} output classes but this app has "
+                    f"{len(CLASS_NAMES)} labels. Add complete class metadata or use "
+                    "a matching checkpoint."
+                )
+                return
         network = models.resnet18(weights=None)
         network.fc = torch.nn.Linear(network.fc.in_features, class_count)
         state_dict = {key.removeprefix("module."): value for key, value in state_dict.items()}
